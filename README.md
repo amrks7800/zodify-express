@@ -164,9 +164,9 @@ import { defineRoute } from "zodify-express";
 
 | Config Field | Type | Description |
 |---|---|---|
-| `body` | `ZodSchema` | Validates `req.body` |
-| `query` | `ZodSchema` | Validates `req.query` |
-| `params` | `ZodSchema` | Validates `req.params` |
+| `body` | `ZodType` | Validates `req.body` |
+| `query` | `ZodType` | Validates `req.query` |
+| `params` | `ZodType` | Validates `req.params` |
 | `handler` | `(req, res, next) => void` | Your route logic with fully typed `req` |
 
 All schema fields are optional — only provided schemas are validated.

@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import type { ZodTypeAny, z, ZodError } from "zod";
+import type { ZodType, z, ZodError } from "zod";
 
 // ---------------------------------------------------------------------------
 // Self-contained handler type (avoids transitive @types/express-serve-static-core)
@@ -22,18 +22,18 @@ export type RouteHandler = (
 // ---------------------------------------------------------------------------
 
 type ZodInfer<
-  T extends ZodTypeAny | undefined,
+  T extends ZodType | undefined,
   TDefault = any,
-> = T extends ZodTypeAny ? z.infer<T> : TDefault;
+> = T extends ZodType ? z.infer<T> : TDefault;
 
 // ---------------------------------------------------------------------------
 // Validation schemas
 // ---------------------------------------------------------------------------
 
 export interface ValidationSchemas<
-  TBody extends ZodTypeAny | undefined = undefined,
-  TQuery extends ZodTypeAny | undefined = undefined,
-  TParams extends ZodTypeAny | undefined = undefined,
+  TBody extends ZodType | undefined = undefined,
+  TQuery extends ZodType | undefined = undefined,
+  TParams extends ZodType | undefined = undefined,
 > {
   body?: TBody;
   query?: TQuery;
@@ -45,9 +45,9 @@ export interface ValidationSchemas<
 // ---------------------------------------------------------------------------
 
 export type ValidatedRequest<
-  TBody extends ZodTypeAny | undefined,
-  TQuery extends ZodTypeAny | undefined,
-  TParams extends ZodTypeAny | undefined,
+  TBody extends ZodType | undefined,
+  TQuery extends ZodType | undefined,
+  TParams extends ZodType | undefined,
   TExtra extends Record<string, any> = {},
 > = Request<ZodInfer<TParams>, any, ZodInfer<TBody>, ZodInfer<TQuery>> & TExtra;
 
@@ -56,9 +56,9 @@ export type ValidatedRequest<
 // ---------------------------------------------------------------------------
 
 export interface RouteConfig<
-  TBody extends ZodTypeAny | undefined = undefined,
-  TQuery extends ZodTypeAny | undefined = undefined,
-  TParams extends ZodTypeAny | undefined = undefined,
+  TBody extends ZodType | undefined = undefined,
+  TQuery extends ZodType | undefined = undefined,
+  TParams extends ZodType | undefined = undefined,
   TExtra extends Record<string, any> = {},
 > extends ValidationSchemas<TBody, TQuery, TParams> {
   handler: (
@@ -133,9 +133,9 @@ export function createRouteDefiner<TExtra extends Record<string, any> = {}>(
   const onError = options.onValidationError ?? defaultOnValidationError;
 
   return function defineRoute<
-    TBody extends ZodTypeAny | undefined = undefined,
-    TQuery extends ZodTypeAny | undefined = undefined,
-    TParams extends ZodTypeAny | undefined = undefined,
+    TBody extends ZodType | undefined = undefined,
+    TQuery extends ZodType | undefined = undefined,
+    TParams extends ZodType | undefined = undefined,
   >(config: RouteConfig<TBody, TQuery, TParams, TExtra>): RouteHandler {
     return async (req: Request, res: Response, next: NextFunction) => {
       const validatedReq = req as ValidatedRequest<
