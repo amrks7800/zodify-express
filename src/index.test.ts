@@ -55,7 +55,7 @@ describe("defineRoute (default, no extra props)", () => {
       handler,
     });
 
-    const req = mockReq({ query: { page: "3" } as any });
+    const req = mockReq({ query: { page: "3" } });
     const res = mockRes();
 
     await middleware(req, res, mockNext);
@@ -73,7 +73,7 @@ describe("defineRoute (default, no extra props)", () => {
     });
 
     const uuid = "550e8400-e29b-41d4-a716-446655440000";
-    const req = mockReq({ params: { id: uuid } as any });
+    const req = mockReq({ params: { id: uuid } });
     const res = mockRes();
 
     await middleware(req, res, mockNext);
