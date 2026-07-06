@@ -274,6 +274,246 @@ export default router;
 
 ---
 
+## 🏗️ Real-World Examples
+
+### Multiple route definers — public vs. authenticated
+
+The most common pattern: create **two** route definers, one for public endpoints and one for authenticated endpoints. Each one carries its own type context.
+
+```ts
+// src/lib/routes.ts
+import { createRouteDefiner, defineRoute } from "zodify-express";
+
+// ── Public routes (no auth required) ─────────────────────────
+// Use the built-in `defineRoute` — or create one with custom error handling:
+export const publicRoute = createRouteDefiner({
+  onValidationError(error, _req, res) {
+    res.status(422).json({
+      code: "VALIDATION_ERROR",
+      issues: error.issues,
+    });
+  },
+});
+
+// ── Authenticated routes ─────────────────────────────────────
+// Your auth middleware attaches `user` to the request:
+export const authRoute = createRouteDefiner<{
+  user: { id: string; email: string; role: "admin" | "member" };
+}>();
+```
+
+Now use them in your route files:
+
+```ts
+// src/routes/auth.routes.ts
+import { z } from "zod";
+import { publicRoute } from "../lib/routes";
+
+export const register = publicRoute({
+  body: z.object({
+    name: z.string().min(2),
+    email: z.string().email(),
+    password: z.string().min(8),
+  }),
+  handler(req, res) {
+    // req.body → { name: string; email: string; password: string } ✅
+    // req.user → ❌ does NOT exist — this is a public route
+    res.status(201).json({ message: `Account created for ${req.body.email}` });
+  },
+});
+
+export const login = publicRoute({
+  body: z.object({
+    email: z.string().email(),
+    password: z.string(),
+  }),
+  handler(req, res) {
+    // req.body.email → string ✅
+    res.json({ token: "jwt-token-here" });
+  },
+});
+```
+
+```ts
+// src/routes/user.routes.ts
+import { z } from "zod";
+import { authRoute } from "../lib/routes";
+
+export const getMe = authRoute({
+  handler(req, res) {
+    // req.user.id    → string ✅
+    // req.user.email → string ✅
+    // req.user.role  → "admin" | "member" ✅
+    res.json({ user: req.user });
+  },
+});
+
+export const updateProfile = authRoute({
+  body: z.object({
+    name: z.string().min(2).optional(),
+    bio: z.string().max(500).optional(),
+  }),
+  handler(req, res) {
+    // req.user is fully typed AND req.body is validated
+    res.json({ updated: { userId: req.user.id, ...req.body } });
+  },
+});
+```
+
+Wire it all up:
+
+```ts
+// src/app.ts
+import express from "express";
+import { authMiddleware } from "./middleware/auth";
+import { register, login } from "./routes/auth.routes";
+import { getMe, updateProfile } from "./routes/user.routes";
+
+const app = express();
+app.use(express.json());
+
+// Public — no middleware
+app.post("/auth/register", register);
+app.post("/auth/login", login);
+
+// Authenticated — auth middleware runs first
+app.get("/users/me", authMiddleware, getMe);
+app.patch("/users/me", authMiddleware, updateProfile);
+```
+
+---
+
+### Role-based route definers
+
+Need different types for different roles? Create a definer per role:
+
+```ts
+import { createRouteDefiner } from "zodify-express";
+
+type BaseUser = { id: string; email: string };
+
+// Regular users
+export const userRoute = createRouteDefiner<{
+  user: BaseUser & { role: "member" };
+}>();
+
+// Admins get extra fields
+export const adminRoute = createRouteDefiner<{
+  user: BaseUser & { role: "admin"; permissions: string[] };
+}>();
+```
+
+```ts
+import { z } from "zod";
+import { adminRoute } from "../lib/routes";
+
+// Only admins can delete users
+export const deleteUser = adminRoute({
+  params: z.object({ id: z.string().uuid() }),
+  handler(req, res) {
+    // req.user.permissions → string[] ✅
+    // req.params.id        → string   ✅
+    if (!req.user.permissions.includes("users:delete")) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    res.json({ deleted: req.params.id });
+  },
+});
+```
+
+---
+
+### Multi-tenant apps
+
+When your middleware attaches both a `user` and a `tenant`:
+
+```ts
+import { createRouteDefiner } from "zodify-express";
+
+export const tenantRoute = createRouteDefiner<{
+  user: { id: string; email: string };
+  tenant: { id: string; plan: "free" | "pro" | "enterprise" };
+}>();
+```
+
+```ts
+import { z } from "zod";
+import { tenantRoute } from "../lib/routes";
+
+export const createProject = tenantRoute({
+  body: z.object({
+    name: z.string().min(1).max(100),
+    description: z.string().max(1000).optional(),
+  }),
+  handler(req, res) {
+    // req.user.id    → string                          ✅
+    // req.tenant.plan → "free" | "pro" | "enterprise"  ✅
+    // req.body.name  → string                          ✅
+
+    if (req.tenant.plan === "free") {
+      return res.status(403).json({ error: "Upgrade to create projects" });
+    }
+
+    res.status(201).json({
+      project: {
+        name: req.body.name,
+        owner: req.user.id,
+        tenant: req.tenant.id,
+      },
+    });
+  },
+});
+```
+
+---
+
+### Combining with existing Express middleware
+
+`defineRoute` returns a standard Express handler, so it slots in naturally alongside any middleware:
+
+```ts
+import express from "express";
+import rateLimit from "express-rate-limit";
+import { z } from "zod";
+import { publicRoute, authRoute } from "./lib/routes";
+import { authMiddleware } from "./middleware/auth";
+
+const app = express();
+app.use(express.json());
+
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+
+// Stack middleware as usual — defineRoute is just another handler
+app.post(
+  "/auth/login",
+  loginLimiter,
+  publicRoute({
+    body: z.object({
+      email: z.string().email(),
+      password: z.string(),
+    }),
+    handler(req, res) {
+      res.json({ token: "..." });
+    },
+  })
+);
+
+app.delete(
+  "/posts/:id",
+  authMiddleware,
+  authRoute({
+    params: z.object({ id: z.string().uuid() }),
+    handler(req, res) {
+      // authMiddleware already verified the user
+      // defineRoute validated the UUID param
+      res.json({ deleted: req.params.id, by: req.user.id });
+    },
+  })
+);
+```
+
+---
+
 ## ⚙️ How It Works
 
 ```
