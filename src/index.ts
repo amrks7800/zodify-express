@@ -14,16 +14,17 @@ import type { ZodTypeAny, z, ZodError } from "zod";
 export type RouteHandler = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => void | Promise<void>;
 
 // ---------------------------------------------------------------------------
 // Utility types
 // ---------------------------------------------------------------------------
 
-type ZodInfer<T extends ZodTypeAny | undefined, TDefault = any> = T extends ZodTypeAny
-  ? z.infer<T>
-  : TDefault;
+type ZodInfer<
+  T extends ZodTypeAny | undefined,
+  TDefault = any,
+> = T extends ZodTypeAny ? z.infer<T> : TDefault;
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -32,7 +33,7 @@ type ZodInfer<T extends ZodTypeAny | undefined, TDefault = any> = T extends ZodT
 export interface ValidationSchemas<
   TBody extends ZodTypeAny | undefined = undefined,
   TQuery extends ZodTypeAny | undefined = undefined,
-  TParams extends ZodTypeAny | undefined = undefined
+  TParams extends ZodTypeAny | undefined = undefined,
 > {
   body?: TBody;
   query?: TQuery;
@@ -47,13 +48,8 @@ export type ValidatedRequest<
   TBody extends ZodTypeAny | undefined,
   TQuery extends ZodTypeAny | undefined,
   TParams extends ZodTypeAny | undefined,
-  TExtra extends Record<string, any> = {}
-> = Request<
-  ZodInfer<TParams>,
-  any,
-  ZodInfer<TBody>,
-  ZodInfer<TQuery>
-> & TExtra;
+  TExtra extends Record<string, any> = {},
+> = Request<ZodInfer<TParams>, any, ZodInfer<TBody>, ZodInfer<TQuery>> & TExtra;
 
 // ---------------------------------------------------------------------------
 // Route config – what the developer passes to `defineRoute`
@@ -63,12 +59,12 @@ export interface RouteConfig<
   TBody extends ZodTypeAny | undefined = undefined,
   TQuery extends ZodTypeAny | undefined = undefined,
   TParams extends ZodTypeAny | undefined = undefined,
-  TExtra extends Record<string, any> = {}
+  TExtra extends Record<string, any> = {},
 > extends ValidationSchemas<TBody, TQuery, TParams> {
   handler: (
     req: ValidatedRequest<TBody, TQuery, TParams, TExtra>,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => Promise<void> | void;
 }
 
@@ -85,7 +81,7 @@ export interface RouteDefinerOptions {
     error: ZodError,
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
   ) => void;
 }
 
@@ -93,12 +89,9 @@ export interface RouteDefinerOptions {
 // Default validation error handler
 // ---------------------------------------------------------------------------
 
-const defaultOnValidationError: NonNullable<RouteDefinerOptions["onValidationError"]> = (
-  error,
-  _req,
-  res,
-  _next
-) => {
+const defaultOnValidationError: NonNullable<
+  RouteDefinerOptions["onValidationError"]
+> = (error, _req, res, _next) => {
   res.status(400).json({
     success: false,
     message: "Validation failed",
@@ -135,29 +128,39 @@ const defaultOnValidationError: NonNullable<RouteDefinerOptions["onValidationErr
  * ```
  */
 export function createRouteDefiner<TExtra extends Record<string, any> = {}>(
-  options: RouteDefinerOptions = {}
+  options: RouteDefinerOptions = {},
 ) {
   const onError = options.onValidationError ?? defaultOnValidationError;
 
   return function defineRoute<
     TBody extends ZodTypeAny | undefined = undefined,
     TQuery extends ZodTypeAny | undefined = undefined,
-    TParams extends ZodTypeAny | undefined = undefined
-  >(
-    config: RouteConfig<TBody, TQuery, TParams, TExtra>
-  ): RouteHandler {
+    TParams extends ZodTypeAny | undefined = undefined,
+  >(config: RouteConfig<TBody, TQuery, TParams, TExtra>): RouteHandler {
     return async (req: Request, res: Response, next: NextFunction) => {
+      const validatedReq = req as ValidatedRequest<
+        TBody,
+        TQuery,
+        TParams,
+        TExtra
+      >;
       try {
         if (config.params) {
-          req.params = (await config.params.parseAsync(req.params)) as any;
+          validatedReq.params = (await config.params.parseAsync(
+            req.params,
+          )) as ZodInfer<TParams>;
         }
         if (config.query) {
-          (req as any).query = await config.query.parseAsync(req.query);
+          validatedReq.query = (await config.query.parseAsync(
+            req.query,
+          )) as ZodInfer<TQuery>;
         }
         if (config.body) {
-          req.body = await config.body.parseAsync(req.body);
+          validatedReq.body = (await config.body.parseAsync(
+            req.body,
+          )) as ZodInfer<TBody>;
         }
-        await config.handler(req as any, res, next);
+        await config.handler(validatedReq, res, next);
       } catch (error) {
         // If it's a ZodError, delegate to the custom error handler
         if (error && typeof error === "object" && "issues" in error) {
