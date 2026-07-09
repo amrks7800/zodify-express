@@ -146,19 +146,31 @@ export function createRouteDefiner<TExtra extends Record<string, any> = {}>(
       >;
       try {
         if (config.params) {
-          validatedReq.params = (await config.params.parseAsync(
-            req.params,
-          )) as ZodInfer<TParams>;
+          const parsed = await config.params.parseAsync(req.params);
+          Object.defineProperty(validatedReq, "params", {
+            value: parsed,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
         }
         if (config.query) {
-          validatedReq.query = (await config.query.parseAsync(
-            req.query,
-          )) as ZodInfer<TQuery>;
+          const parsed = await config.query.parseAsync(req.query);
+          Object.defineProperty(validatedReq, "query", {
+            value: parsed,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
         }
         if (config.body) {
-          validatedReq.body = (await config.body.parseAsync(
-            req.body,
-          )) as ZodInfer<TBody>;
+          const parsed = await config.body.parseAsync(req.body);
+          Object.defineProperty(validatedReq, "body", {
+            value: parsed,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
         }
         await config.handler(validatedReq, res, next);
       } catch (error) {

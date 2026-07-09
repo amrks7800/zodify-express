@@ -64,6 +64,45 @@ describe("defineRoute (default, no extra props)", () => {
     expect(handler.mock.calls[0][0].query).toEqual({ page: 3 });
   });
 
+  it("handles read-only query/params/body properties gracefully", async () => {
+    const handler = vi.fn();
+
+    const middleware = defineRoute({
+      params: z.object({ id: z.coerce.number() }),
+      query: z.object({ page: z.coerce.number() }),
+      body: z.object({ name: z.string() }),
+      handler,
+    });
+
+    const req = mockReq();
+    Object.defineProperty(req, "params", {
+      get() {
+        return { id: "123" };
+      },
+      configurable: true,
+    });
+    Object.defineProperty(req, "query", {
+      get() {
+        return { page: "5" };
+      },
+      configurable: true,
+    });
+    Object.defineProperty(req, "body", {
+      get() {
+        return { name: "hello" };
+      },
+      configurable: true,
+    });
+    const res = mockRes();
+
+    await middleware(req, res, mockNext);
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0][0].params).toEqual({ id: 123 });
+    expect(handler.mock.calls[0][0].query).toEqual({ page: 5 });
+    expect(handler.mock.calls[0][0].body).toEqual({ name: "hello" });
+  });
+
   it("passes validated params to handler", async () => {
     const handler = vi.fn();
 
